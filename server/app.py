@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from models import db, Restaurant, RestaurantPizza, Pizza
 from flask_migrate import Migrate
-from flask import Flask, request, make_response
+from flask import Flask, request, make_response, jsonify
 from flask_restful import Api, Resource
 import os
 
@@ -23,6 +23,67 @@ api = Api(app)
 @app.route("/")
 def index():
     return "<h1>Code challenge</h1>"
+
+# GET /restaurants
+@app.route('/restaurants', methods=['GET'])
+def get_restaurants():
+    restaurants = Restaurant.query.all()
+    return jsonify([restaurant.to_dict(rules=('-restaurant_pizzas',)) for restaurant in restaurants])
+
+# GET /restaurants/<int:id>
+@app.route('/restaurants/<int:id>', methods=['GET'])
+def get_restaurant(id):
+    restaurant = Restaurant.query.get(id)
+    if restaurant:
+        return jsonify(restaurant.to_dict())
+    else:
+        return jsonify({"error": "Restaurant not found"}), 404
+
+# DELETE /restaurants/<int:id>
+@app.route('/restaurants/<int:id>', methods=['DELETE'])
+def delete_restaurant(id):
+    restaurant = Restaurant.query.get(id)
+    if restaurant:
+        db.session.delete(restaurant)
+        db.session.commit()
+        return '', 204
+    else:
+        return jsonify({"error": "Restaurant not found"}), 404
+
+# GET /pizzas
+@app.route('/pizzas', methods=['GET'])
+def get_pizzas():
+    pizzas = Pizza.query.all()
+    return jsonify([pizza.to_dict(rules=('-restaurant_pizzas',)) for pizza in pizzas])
+
+# POST /restaurant_pizzas
+@app.route('/restaurant_pizzas', methods=['POST'])
+def create_restaurant_pizza():
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not all(key in data for key in ['price', 'pizza_id', 'restaurant_id']):
+            return jsonify({"errors": ["Missing required fields"]}), 400
+        
+        # Create new RestaurantPizza
+        restaurant_pizza = RestaurantPizza(
+            price=data['price'],
+            pizza_id=data['pizza_id'],
+            restaurant_id=data['restaurant_id']
+        )
+        
+        db.session.add(restaurant_pizza)
+        db.session.commit()
+        
+        # Return the created RestaurantPizza with associated data
+        return jsonify(restaurant_pizza.to_dict()), 201
+        
+    except ValueError as e:
+        return jsonify({"errors": [str(e)]}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"errors": ["Validation errors"]}), 400
 
 
 if __name__ == "__main__":
